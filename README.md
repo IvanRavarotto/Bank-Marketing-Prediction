@@ -24,9 +24,15 @@ Construir y comparar modelos de clasificación supervisada para predecir la susc
 | Variable objetivo | `y` (yes/no) |
 | Licencia | Creative Commons Attribution 4.0 |
 | DOI | 10.24432/C5K306 |
-| Archivo previsto | `bank-additional-full.csv` |
+| Archivo | `data/raw/bank-additional-full.csv` |
+| Ficha de variables | `data/raw/bank-additional-names.txt` |
+| Instancias | 41.188 |
+| Atributos | 20 + salida (`y`) |
 
-**Consideración sobre `duration`:** la variable `duration` representa la duración del último contacto. Su tratamiento debe decidirse después de definir exactamente en qué momento se realizaría la predicción, para evitar utilizar información que no estaría disponible en ese escenario.
+**Escenario de predicción (definido):** la predicción se realiza **antes de realizar la llamada**, con el objetivo de decidir a qué clientes contactar (§1). En consecuencia:
+
+- `duration` se **descarta** como característica: no se conoce antes de la llamada y, según la ficha del dataset (`bank-additional-names.txt`), una vez finalizada la llamada el resultado `y` ya es conocido. Solo podría usarse con fines de benchmark, no en el modelo principal.
+- El resto del bloque *"last contact of the current campaign"* se evaluó en el EDA (notebook 01, sección 10) con el mismo criterio: **`campaign`, `month`, `day_of_week` y `contact` quedan FUERA** (información generada durante la ejecución de la campaña). **Set final de modelado: 15 features**.
 
 ## 4. Preguntas de análisis
 
@@ -42,16 +48,18 @@ Construir y comparar modelos de clasificación supervisada para predecir la susc
 
 ## 5. Análisis Exploratorio de Datos (EDA)
 
-Se completará después de examinar el dataset. Documentar:
+> Evidencia reproducible en `notebooks/01_exploratory_analysis.ipynb` (ejecutado con el entorno `.venv`).
 
-- Dimensiones y tipos de variables.
-- Distribución del objetivo.
-- Categorías y valores únicos.
-- Tratamiento conceptual de `unknown`.
-- Duplicados y consistencia.
-- Distribuciones numéricas y posibles valores atípicos.
-- Relaciones entre características y con el objetivo.
-- Principales hallazgos.
+- **Dimensiones y tipos**: 41.188 × 21 — 10 numéricas (`int64`/`float64`) y 11 categóricas de texto (incluye `y`). 0 celdas vacías, 0 NaN.
+- **Distribución del objetivo**: `no` 36.548 (88,7%) · `yes` 4.640 (11,3%) → desbalance **7,9:1**. Consecuencias: el accuracy no sirve como métrica principal, el split debe estratificarse y el desbalance se evaluará en §6.
+- **Categorías**: `job` 12 · `education` 8 · `marital` 4 · `default`/`housing`/`loan`/`poutcome` 3 · `month` 10 (sin ene/feb: ventana de campaña, no es error) · `day_of_week` 5 · `contact` 2.
+- **Tratamiento de `unknown`** (missing codificado como categoría, ficha l.72): `default` 20,9% · `education` 4,2% · `housing` y `loan` 2,4% · `job` 0,8% · `marital` 0,2%. **Decisión**: no imputar; mantener `unknown` como categoría con codificación propia (One-Hot) en §6. `default` además tiene solo 3 `yes` (0,0%) → candidata a descartarse.
+- **Duplicados**: 12 copias redundantes (24 filas implicadas, 0,03%) → eliminar en §6 (evita doble peso y fuga train/test).
+- **Consistencia de centinelas**: `previous=0` ↔ `poutcome=nonexistent` coinciden al 100% (35.563 filas). Pero **4.110 filas tienen `pdays=999` con historia previa** (`previous>0`) → contradicen la ficha; `previous`/`poutcome` son la fuente de verdad histórica y `pdays` deberá tratarse de forma explícita en §6.
+- **Distribuciones numéricas**: `age` 17–98 (mediana 38) · `campaign` 1–56 (mediana 2) · `previous` 0–7 · `pdays` dominado por el 999 (Q1=999) · `euribor3m` 0,63–5,04 · `nr.employed` 4.964–5.228. Atípicos IQR: `age` 469 · `campaign` 2.406 · `previous` 5.625 (artefacto estadístico: IQR=0) · `duration` 2.963 → señalizar, no eliminar automáticamente.
+- **Relaciones con el objetivo** (tasa base 11,3%): por encima `poutcome=success` **65,1%**, `student` 31,4%, `retired` 25,2%, `contact=cellular` 14,7%; por debajo `blue-collar` 6,9%, `poutcome=nonexistent` 8,8%, `default=unknown` 5,2%. `housing` casi plano (10,8–11,6%). Correlación con `y_bin`: `nr.employed` −0,36 · `euribor3m` −0,31 · `emp.var.rate` −0,30 · `previous` +0,23. `duration` media 220,8 s (`no`) vs 553,2 s (`yes`) → confirma su exclusión por fuga.
+- **Multicolinealidad**: los indicadores macro se mueven entre sí (mapa de calor del notebook) → prever regularización en modelos lineales e interpretar importancias con cuidado.
+- **Disponibilidad (§3, resuelto)**: 15 features IN (perfil 7 + histórico 3 + macro 5) · 5 FUERA (`duration`, `campaign`, `month`, `day_of_week`, `contact`).
 
 ## 6. Preprocesamiento
 
@@ -213,10 +221,12 @@ pip install -r requirements.txt
 
 ### 5. Obtener el dataset
 
-Descargar Bank Marketing desde UCI Machine Learning Repository, extraer `bank-additional-full.csv` y colocarlo en:
+Descargar Bank Marketing desde UCI Machine Learning Repository (https://archive.ics.uci.edu/dataset/222/bank+marketing), extraer del zip `bank-additional.zip` los siguientes archivos y colocarlos en:
 
 ```text
-data/raw/bank-additional-full.csv
+data/raw/
+├── bank-additional-full.csv
+└── bank-additional-names.txt
 ```
 
 El archivo original debe conservarse sin modificaciones.
@@ -243,7 +253,6 @@ Los notebooks estarán numerados según el orden previsto de ejecución. Ejecuta
 
 - Completar la comprensión y documentación del dataset.
 - Realizar el análisis exploratorio.
-- Definir el escenario exacto de predicción.
 - Establecer el baseline.
 - Diseñar el pipeline de preprocesamiento.
 - Evaluar modelos bajo una estrategia común de validación.
