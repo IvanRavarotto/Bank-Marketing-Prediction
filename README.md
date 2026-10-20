@@ -1,7 +1,6 @@
 # Bank Marketing Classification
 
-> **Guía de README · Proyecto de clasificación supervisada**
-> Documento vivo: completar cada sección únicamente cuando exista evidencia en el análisis.
+Proyecto de clasificación supervisada para predecir la suscripción a un depósito a plazo en campañas de marketing telefónico. Incluye análisis exploratorio, preprocesamiento, baseline, comparación de modelos, validación y evaluación final sobre el test reservado.
 
 ## 1. Problema
 
@@ -56,7 +55,7 @@ Construir y comparar modelos de clasificación supervisada para predecir la susc
 - **Categorías**: `job` 12 · `education` 8 · `marital` 4 · `default`/`housing`/`loan`/`poutcome` 3 · `month` 10 (sin ene/feb: ventana de campaña, no es error) · `day_of_week` 5 · `contact` 2.
 - **Tratamiento de `unknown`** (missing codificado como categoría, ficha l.72): `default` 20,9% · `education` 4,2% · `housing` y `loan` 2,4% · `job` 0,8% · `marital` 0,2%. **Decisión**: no imputar; mantener `unknown` como categoría con codificación propia (One-Hot) en §6. `default` además tiene solo 3 `yes` (0,0%) → candidata a descartarse.
 - **Duplicados**: 12 copias redundantes (24 filas implicadas, 0,03%) → eliminar en §6 (evita doble peso y fuga train/test).
-- **Consistencia de centinelas**: `previous=0` ↔ `poutcome=nonexistent` coinciden al 100% (35.563 filas). Pero **4.110 filas tienen `pdays=999` con historia previa** (`previous>0`) → contradicen la ficha; `previous`/`poutcome` son la fuente de verdad histórica y `pdays` deberá tratarse de forma explícita en §6.
+- **Consistencia de centinelas**: `previous=0` ↔ `poutcome=nonexistent` coinciden al 100% (35.563 filas). Pero **4.110 filas tienen `pdays=999` con historia previa** (`previous>0`) → contradicen la ficha; `previous`/`poutcome` son la fuente de verdad histórica y `pdays` se trató de forma explícita en §6.
 - **Distribuciones numéricas**: `age` 17–98 (mediana 38) · `campaign` 1–56 (mediana 2) · `previous` 0–7 · `pdays` dominado por el 999 (Q1=999) · `euribor3m` 0,63–5,04 · `nr.employed` 4.964–5.228. Atípicos IQR: `age` 469 · `campaign` 2.406 · `previous` 5.625 (artefacto estadístico: IQR=0) · `duration` 2.963 → señalizar, no eliminar automáticamente.
 - **Relaciones con el objetivo** (tasa base 11,3%): por encima `poutcome=success` **65,1%**, `student` 31,4%, `retired` 25,2%, `contact=cellular` 14,7%; por debajo `blue-collar` 6,9%, `poutcome=nonexistent` 8,8%, `default=unknown` 5,2%. `housing` casi plano (10,8–11,6%). Correlación con `y_bin`: `nr.employed` −0,36 · `euribor3m` −0,31 · `emp.var.rate` −0,30 · `previous` +0,23. `duration` media 220,8 s (`no`) vs 553,2 s (`yes`) → confirma su exclusión por fuga.
 - **Multicolinealidad**: los indicadores macro se mueven entre sí (mapa de calor del notebook) → prever regularización en modelos lineales e interpretar importancias con cuidado.
@@ -181,27 +180,32 @@ Criterios considerados (no solo la métrica más alta):
 
 ## 12. Limitaciones
 
-- Antigüedad y contexto geográfico de los datos.
-- Representatividad del dataset.
-- Desbalance entre clases.
-- Categorías ambiguas o desconocidas.
-- Variables no disponibles en determinados escenarios.
-- Posibles fuentes de sesgo.
-- Límites de generalización.
-- Afirmaciones que los resultados no permiten realizar.
+> Lectura crítica de lo que los resultados **no** cubren. Todas las cifras citadas están en §5–§11.
+
+- **Antigüedad y contexto geográfico**: los datos cubren una única campaña telefónica de una institución portuguesa entre **mayo de 2008 y noviembre de 2010** (ficha del dataset), período que incluye la crisis financiera global. Los 5 indicadores macro (`emp.var.rate`, `cons.price.idx`, `cons.conf.idx`, `euribor3m`, `nr.employed`) —tres de ellos con correlación ≥ 0,30 en magnitud con `y` (§5)— condicionan el modelo a esa economía y ese momento.
+- **Representatividad del dataset**: solo se observa a los clientes que **fueron contactados** por la campaña; no hay registros de clientes no contactados, por lo que no puede estimarse el comportamiento de la base completa. Además, la campaña no es un experimento aleatorio (el banco decide a quién llamar), lo que introduce un **sesgo de selección** que el modelo hereda.
+- **Desbalance entre clases**: 88,7% `no` / 11,3% `yes` (7,9:1, §5). Aunque se priorizó PR-AUC y se ajustó el umbral, ningún candidato alcanza un recall alto sin sacrificar precisión: el mejor punto de F1 del GB quedó en recall 0,605 / precision 0,451 (§10).
+- **Categorías ambiguas o desconocidas**: `unknown` codifica missing como categoría (20,9% en `default`, 4,2% en `education`, §5) y se mantuvo sin imputar. Evita asumir un mecanismo de missingness, pero traslada la ambigüedad al modelo, que le asigna un peso propio vía One-Hot.
+- **Variables no disponibles / techo del escenario**: excluir `duration` (y el bloque de contacto de la campaña actual, §3) es una decisión metodológicamente correcta, pero descarta la señal más predictiva del dataset. El PR-AUC ≈ 0,45 (§9–§10) debe leerse como el techo de **ese escenario**, no del problema completo.
+- **Calidad de la historia de contactos**: `pdays` es el centinela 999 en el 96,3% de las filas y 4.110 registros con `previous>0` lo contradicen (§5); se eliminaron además 12 duplicados exactos (§6). Aunque se trató, el ruido residual afecta justamente la señal más importante (`poutcome`).
+- **Validación no temporal**: el split y la validación cruzada son aleatorios estratificados (§6, §9), pero los datos están ordenados por fecha. Una validación temporal (p. ej., entrenar 2008–2009 y evaluar 2010) sería más estricta para simular el despliegue real y medir el desgaste del modelo en el tiempo.
+- **Posibles fuentes de sesgo**: variables como `job` o `education` pueden codificar sesgos sociales del perfil contactado; sin datos de los no contactados no es posible medirlos ni corregirlos.
+- **Límites de generalización**: no hay evidencia de que los resultados se trasladen a otros bancos, países, canales o épocas; el modelo no se validó fuera de esta muestra.
+- **Afirmaciones que los resultados no permiten realizar**: (1) coeficientes e importancias son **asociaciones descriptivas, no causales** —un score alto no significa que la llamada convierta al cliente—; (2) no se midieron costes de llamada, ingresos ni ROI, por lo que no puede afirmarse que desplegar el modelo sea rentable; (3) no se comparó contra políticas de contacto alternativas (p. ej., reglas de negocio manuales).
 
 ## 13. Conclusiones
 
-- Qué se descubrió durante el análisis.
-- Qué modelo presentó el comportamiento más adecuado.
-- Cuál fue el criterio de selección.
-- Qué errores fueron más relevantes.
-- Qué aprendimos del experimento.
-- Qué utilidad práctica y limitaciones tendría la solución.
+- **Qué se descubrió durante el análisis**: las señales útiles **antes de la llamada** provienen de la **historia de contacto previo** y del **contexto macro**, no del perfil demográfico. `poutcome=success` alcanza 65,1% de suscripción frente al 11,3% base (§5); las correlaciones más fuertes con `y` son `nr.employed` −0,36, `euribor3m` −0,31 y `emp.var.rate` −0,30 (§5). `duration` se confirmó como fuga de información (media 220,8 s en `no` vs 553,2 s en `yes`) y se excluyó (§3); `housing` resultó casi plano.
+- **Qué modelo presentó el comportamiento más adecuado**: **Gradient Boosting** con umbral 0,177 (§10): PR-AUC 0,453 y ROC-AUC 0,808 en el test reservado, con recall 0,605 y F1 0,517, frente a PR-AUC 0,430 de la logística baseline y 0,113 de la referencia trivial. La **regresión logística** se conserva como modelo interpretable de referencia (coeficientes legibles, ~0,8 s/fold).
+- **Cuál fue el criterio de selección**: no la métrica aislada, sino la combinación de **PR-AUC** (métrica principal justificada por el desbalance, §9), **estabilidad** entre folds (std ≤ 0,017), **disponibilidad real** de las 13 features en el momento de decidir (§3) y **configurabilidad del umbral** según el objetivo de negocio (§11).
+- **Qué errores fueron más relevantes**: los **falsos negativos** —clientes que contratarían y no se detectan—, por ser oportunidades perdidas. Con el umbral 0,5 el GB perdía el 80,3% de los suscriptores (recall 0,197); bajarlo a 0,177 sumó **+40,7 pp de recall** y +21,5 pp de F1 a costa de −18,9 pp de precisión (682 llamadas inútiles, §10). Persisten **367 oportunidades perdidas** en el test: ese residual marca el techo del escenario pre-llamada.
+- **Qué aprendimos del experimento**: (1) con desbalance, **el umbral es una decisión de negocio**, no un default —0,5 no es ni gratis ni óptimo—; (2) el **Pipeline integrado** (preprocesador + modelo re-ajustado por fold, §6/§9) evitó fuga y hizo justas las comparaciones; (3) el **accuracy no discrimina** con desbalance (el dummy ya alcanza 88,7%); PR-AUC y la matriz de confusión en el punto de operación sí; (4) la brecha CV vs test fue de solo −0,006 (0,447 → 0,453), sin señales de sobreajuste (§10).
+- **Qué utilidad práctica tendría la solución**: una herramienta de **priorización de llamadas**: ordenar la base de clientes por probabilidad estimada y contactar de mayor a menor score hasta agotar el presupuesto telefónico. En el segmento marcado como positivo, ~45 de cada 100 llamadas terminan en suscripción (precision 0,451) frente al 11,3% de la base (§10).
+- **Qué limitaciones conserva la solución**: depende del contexto macro portugués 2008–2010 y de una sola institución (§12); no fue validada temporal ni externamente; y un despliegue real exigiría re-calibrar con datos actuales, medir el costo real de falsos positivos/negativos y comparar contra la política de contacto vigente antes de fijar el umbral definitivo.
 
 ## 14. Tecnologías
 
-Lista inicial, a conservar solo si realmente se utiliza:
+Herramientas y librerías utilizadas:
 
 - Python
 - Pandas
@@ -243,7 +247,7 @@ Objetivo: permitir que otra persona parta de un clon limpio y pueda ejecutar el 
 
 ### Requisitos
 
-- Python 3.x
+- Python 3.14.7 (versión con la que se ejecutaron los notebooks; las versiones de las librerías están fijadas en `requirements.txt`)
 - Git
 - Jupyter Notebook o JupyterLab
 
@@ -307,7 +311,7 @@ notebooks/01_exploratory_analysis.ipynb
 
 ### 7. Reproducir el análisis
 
-Los notebooks estarán numerados según el orden previsto de ejecución. Ejecutarlos en orden y usando un kernel asociado al entorno virtual `.venv`:
+Los notebooks están numerados en el orden de ejecución. Ejecutarlos en orden usando un kernel asociado al entorno virtual `.venv`:
 
 ```text
 notebooks/01_exploratory_analysis.ipynb
@@ -320,8 +324,6 @@ notebooks/06_results.ipynb
 
 El código reutilizable vive en `src/` y los notebooks lo importan desde la **raíz del repositorio** (`.venv` debe ejecutarse con `jupyter lab` abierto en la raíz). La lógica de preprocesamiento está en `src/preprocessing.py`.
 
-> **Nota:** esta sección deberá actualizarse conforme evolucione la implementación para reflejar el procedimiento real de reproducción.
-
 ## 17. Próximos pasos
 
 - Completar la comprensión y documentación del dataset. ✅
@@ -329,20 +331,17 @@ El código reutilizable vive en `src/` y los notebooks lo importan desde la **ra
 - Establecer el baseline. ✅
 - Diseñar el pipeline de preprocesamiento. ✅
 - Evaluar modelos bajo una estrategia común de validación. ✅
-- Documentar resultados, limitaciones y conclusiones.
-- Redactar §12 (limitaciones) y §13 (conclusiones) con la evidencia generada.
+- Documentar resultados. ✅
+- Redactar §12 (limitaciones) y §13 (conclusiones) con la evidencia generada. ✅
+- Validación temporal (entrenar 2008–2009 y evaluar 2010) para medir el desgaste del modelo (§12).
+- Tuning formal de hiperparámetros del Gradient Boosting (búsqueda en grilla o bayesiana) sobre la CV de §9.
+- Ajuste del umbral según el costo real de falsos positivos y falsos negativos de la campaña (§12).
 
 ## 18. Referencias
 
-- UCI Machine Learning Repository, Bank Marketing.
-- Moro, S., Cortez, P. y Rita, P. A Data-Driven Approach to Predict the Success of Bank Telemarketing.
-- Documentación oficial de las herramientas utilizadas.
-
----
-
-### Reglas de uso de esta guía
-
-- No inventar resultados, modelos o decisiones metodológicas.
-- Completar cada sección a medida que avance el proyecto.
-- Toda cifra final del README debe poder reproducirse.
-- Documentar por qué se tomó una decisión, no solo qué se hizo.
+- UCI Machine Learning Repository, [Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing). DOI: [10.24432/C5K306](https://doi.org/10.24432/C5K306).
+- Moro, S., Cortez, P. y Rita, P. (2014). *A Data-Driven Approach to Predict the Success of Bank Telemarketing*. Decision Support Systems. DOI: [10.1016/j.dss.2014.03.001](https://doi.org/10.1016/j.dss.2014.03.001).
+- [Documentación de scikit-learn](https://scikit-learn.org/stable/).
+- [Documentación de pandas](https://pandas.pydata.org/docs/).
+- [Documentación de Matplotlib](https://matplotlib.org/stable/).
+- [Documentación de Seaborn](https://seaborn.pydata.org/).
