@@ -28,6 +28,8 @@ Construir y comparar modelos de clasificación supervisada para predecir la susc
 | Instancias | 41.188 |
 | Atributos | 20 + salida (`y`) |
 
+> **Licencias**: el código de este repositorio (notebooks y `src/`) se distribuye bajo la licencia **MIT** (`LICENSE`). El dataset original **no** está cubierto por esa licencia: `bank-additional-full.csv` y su ficha pertenecen a UCI y se rigen por **Creative Commons Attribution 4.0**.
+
 **Escenario de predicción (definido):** la predicción se realiza **antes de realizar la llamada**, con el objetivo de decidir a qué clientes contactar (§1). En consecuencia:
 
 - `duration` se **descarta** como característica: no se conoce antes de la llamada y, según la ficha del dataset (`bank-additional-names.txt`), una vez finalizada la llamada el resultado `y` ya es conocido. Solo podría usarse con fines de benchmark, no en el modelo principal.

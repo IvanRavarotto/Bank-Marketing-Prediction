@@ -1,0 +1,12 @@
+# Normalizar saltos de línea a LF en el repositorio (evita que Windows
+# marque archivos como modificados solo por cambios CRLF/LF).
+* text=auto
+
+# El dataset y los notebooks se conservan tal cual (contenido binario/JSON sensible a EOL).
+*.csv -text
+*.ipynb -text
+
+# Código y documentación con LF.
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
